@@ -1,0 +1,17 @@
+{
+  "name": "blockvote",
+  "version": "1.0.0",
+  "description": "基于区块链的投票系统",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "atpdxy",
+  "license": "ISC",
+  "dependencies": {
+    "@metamask/detect-provider": "^2.0.0",
+    "express": "^4.18.2",
+    "mysql": "^2.18.1",
+    "web3": "^1.10.0"
+  }
+}

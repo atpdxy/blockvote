@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能合约</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .contract-item {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .contract-item:hover {
+            background-color: #e9e9e9;
+        }
+        .contract-item p {
+            margin: 5px 0;
+        }
+        .contract-item strong {
+            font-weight: bold;
+        }
+        canvas {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>当前用户创建的智能合约</h1>
+        <div id="contracts-list"></div>
+    </div>
+
+    <script>
+        let currentContractCanvas = null;
+
+        // 获取 MetaMask 账户的函数
+        async function getMetaMaskAccount() {
+            if (window.ethereum) {
+                await window.ethereum.enable();
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                return accounts[0];
+            } else {
+                alert('未检测到 MetaMask 扩展！请安装 MetaMask 以使用此功能。');
+            }
+        }
+
+        // 获取当前 MetaMask 账户的合约
+        async function fetchContracts() {
+            const userPublicKey = await getMetaMaskAccount();
+            const response = await fetch('/getContracts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ publicKey: userPublicKey })
+            });
+            return response.json();
+        }
+
+        // 在页面上显示合约
+        async function displayContracts() {
+            try {
+                const data = await fetchContracts();
+                const contractsList = document.getElementById('contracts-list');
+                data.contracts.forEach(contract => {
+                    const contractItem = document.createElement('div');
+                    contractItem.classList.add('contract-item');
+                    contractItem.innerHTML = `
+                        <p><strong>合约地址：</strong> ${contract.contract_address}</p>
+                        <p><strong>截止日期：</strong> ${contract.deadline}</p>
+                        <p><strong>投票项目：</strong> ${contract.vote_title}</p>
+                        <canvas class="vote-chart" style="display: none;"></canvas>
+                    `;
+                    contractItem.addEventListener('click', () => {
+                        handleContractClick(contract, contractItem);
+                    });
+                    contractsList.appendChild(contractItem);
+                });
+            } catch (error) {
+                console.error('获取合约时出错:', error);
+            }
+        }
+
+        // 处理合约点击事件
+        async function handleContractClick(contract, contractItem) {
+            console.log('点击了合约:', contract.contract_address);
+            if (currentContractCanvas) {
+                currentContractCanvas.style.display = 'none'; // 隐藏先前合约的柱状图
+            }
+            try {
+                const response = await fetch('/getContractDetails', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ contractAddress: contract.contract_address })
+                });
+                const data = await response.json();
+                console.log('从后端收到的数据:', data);
+                displayVoteChart(data, contractItem);
+            } catch (error) {
+                console.error('处理合约时出错:', error);
+            }
+        }
+            
+        // 显示投票项目柱状图
+        function displayVoteChart(data, contractItem) {
+            console.log('title:', data.title);
+            console.log('options:', data.options);
+            console.log('deadline:', data.deadline);
+            console.log('counts:', data.voteCounts);
+            const canvas = contractItem.querySelector('.vote-chart');
+            canvas.style.display = 'block';
+            currentContractCanvas = canvas; // 更新当前合约的 canvas 元素
+            
+            // 渲染柱状图
+            const ctx = canvas.getContext('2d');
+            const chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.options,
+                    datasets: [{
+                        label: '得票数',
+                        data: data.voteCounts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // 当页面加载时调用显示合约的函数
+        window.addEventListener('load', displayContracts);
+    </script>
+</body>
+</html>

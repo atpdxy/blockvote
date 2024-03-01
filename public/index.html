@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetaMask Authorization</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.3/dist/web3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@metamask/detect-provider@1.2.0/dist/detect-provider.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+
+        .info {
+            margin-bottom: 20px;
+            text-align: left;
+            margin-left: 20px; /* 将账户地址和余额右移 */
+        }
+
+        .account,
+        .balance {
+            margin-bottom: 10px;
+        }
+
+        .buttons {
+            margin-bottom: 20px;
+        }
+
+        .button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .button:hover {
+            background-color: #0056b3;
+        }
+
+        .contract-info {
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>欢迎使用基于区块链的投票系统！</h1>
+        <div class="info">
+            <div id="account" class="account"></div>
+            <div id="balance" class="balance"></div>
+        </div>
+
+        <div class="buttons">
+            <button id="createVote" class="button">发起投票</button>
+            <button id="joinVote" class="button">加入投票</button>
+            <button id="myVotes" class="button">我的投票</button>
+        </div>
+        <div id="contractInfo" class="contract-info"></div>
+    </div>
+
+    <script>
+        // 在页面加载时立即执行的同步代码
+        window.addEventListener('DOMContentLoaded', async () => {
+            // 检查 MetaMask 是否安装
+            const provider = await detectEthereumProvider();
+            if (!provider) {
+                console.error('请安装 MetaMask 扩展程序');
+                return;
+            }
+
+            // 创建 Web3 实例
+            const web3 = new Web3(provider);
+
+            try {
+                // 请求 MetaMask 授权
+                await ethereum.request({ method: 'eth_requestAccounts' });
+                console.log('MetaMask 已授权');
+
+                // 获取账户地址
+                const accounts = await web3.eth.getAccounts();
+                const account = accounts[0];
+                console.log('当前账户地址:', account);
+                // 发送 MetaMask 用户地址到后端
+                await sendMetaMaskUserAddress(account);
+
+                // 获取账户余额
+                const balance = await web3.eth.getBalance(account);
+                console.log('当前账户余额:', web3.utils.fromWei(balance, 'ether'), 'ETH');
+
+                // 显示账户地址和余额
+                document.getElementById('account').innerText = `账户地址：${account}`;
+                document.getElementById('balance').innerText = `账户余额：${web3.utils.fromWei(balance, 'ether')} ETH`;
+            } catch (error) {
+                console.error('授权失败:', error);
+            }
+        });
+
+        async function sendMetaMaskUserAddress(address) {
+            try {
+                // 发送 POST 请求到后端
+                const response = await fetch('/checkMetaMaskUser', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ address }) // 将 MetaMask 用户地址发送到后端
+                });
+
+                if (response.ok) {
+                    console.log('MetaMask 用户地址已发送到后端');
+                } else {
+                    console.error('发送 MetaMask 用户地址到后端时出错:', response.statusText);
+                }
+            } catch (error) {
+                console.error('发送 MetaMask 用户地址到后端时出错:', error);
+            }
+        }
+
+        // 点击创建投票按钮时跳转到创建投票页面
+        document.getElementById('createVote').addEventListener('click', () => {
+            window.location.href = '/create-vote.html';
+        });
+
+        // 点击加入投票按钮时跳转到加入投票页面
+        document.getElementById('joinVote').addEventListener('click', () => {
+            window.location.href = '/join-vote.html';
+        });
+        
+        // 点击我的投票按钮时跳转到我的投票页面
+        document.getElementById('myVotes').addEventListener('click', () => {
+            window.location.href = '/my-votes.html';
+        });
+    </script>
+</body>
+</html>
