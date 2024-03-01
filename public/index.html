@@ -91,18 +91,11 @@
             try {
                 // 请求 MetaMask 授权
                 await ethereum.request({ method: 'eth_requestAccounts' });
-                console.log('MetaMask 已授权');
-
                 // 获取账户地址
                 const accounts = await web3.eth.getAccounts();
                 const account = accounts[0];
-                console.log('当前账户地址:', account);
-                // 发送 MetaMask 用户地址到后端
-                await sendMetaMaskUserAddress(account);
-
                 // 获取账户余额
                 const balance = await web3.eth.getBalance(account);
-                console.log('当前账户余额:', web3.utils.fromWei(balance, 'ether'), 'ETH');
 
                 // 显示账户地址和余额
                 document.getElementById('account').innerText = `账户地址：${account}`;
@@ -111,27 +104,6 @@
                 console.error('授权失败:', error);
             }
         });
-
-        async function sendMetaMaskUserAddress(address) {
-            try {
-                // 发送 POST 请求到后端
-                const response = await fetch('/checkMetaMaskUser', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ address }) // 将 MetaMask 用户地址发送到后端
-                });
-
-                if (response.ok) {
-                    console.log('MetaMask 用户地址已发送到后端');
-                } else {
-                    console.error('发送 MetaMask 用户地址到后端时出错:', response.statusText);
-                }
-            } catch (error) {
-                console.error('发送 MetaMask 用户地址到后端时出错:', error);
-            }
-        }
 
         // 点击创建投票按钮时跳转到创建投票页面
         document.getElementById('createVote').addEventListener('click', () => {

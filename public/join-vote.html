@@ -1,157 +1,3 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Join Vote</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 50px auto;
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        h1 {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 10px;
-        }
-
-        input[type="text"] {
-            width: calc(100% - 20px);
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-
-        button {
-            padding: 10px 20px;
-            background-color: #007bff;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        #voteInfo {
-            text-align: left;
-            margin-top: 20px;
-        }
-
-        select {
-            width: calc(100% - 20px);
-            padding: 10px;
-            margin-bottom: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>加入投票</h1>
-        <label for="contractAddress">合约地址：</label>
-        <input type="text" id="contractAddress" name="contractAddress" placeholder="在此输入合约地址" required>
-        <button id="joinButton">加入</button>
-
-        <div id="voteInfo"></div>
-    </div>
-
-    <script>
-        window.addEventListener('DOMContentLoaded', async () => {
-            document.getElementById('joinButton').addEventListener('click', async () => {
-                const contractAddress = document.getElementById('contractAddress').value.trim();
-                console.log('加入的投票地址为:', contractAddress);
-                try {
-                    const response = await fetch(`/getBallotInfo?contractAddress=${contractAddress}`);
-                    if (!response.ok) {
-                        throw new Error('获取投票项目信息失败');
-                    }
-                    
-                    const data = await response.json();
-                    const voteInfoDiv = document.getElementById('voteInfo');
-
-                    // 根据返回的数据判断投票是否已截至
-                    const currentTimestamp = Math.floor(Date.now() / 1000);
-                    const deadlineTimestamp = new Date(data.deadline).getTime() / 1000;
-                    if (currentTimestamp >= deadlineTimestamp) {
-                        voteInfoDiv.innerHTML = `<p>投票已经截至，无法继续投票。</p>`;
-                        return;
-                    }
-
-                    // 判断用户是否已经投过票
-                    if (data.result === 1) {
-                        voteInfoDiv.innerHTML = `<p>您已经投过票了。</p>`;
-                        return;
-                    }
-
-                    // 如果投票未截至且用户未投过票，则显示投票选项
-                    voteInfoDiv.innerHTML = `
-                        <p><strong>投票项目名称：</strong> ${data.title}</p>
-                        <p><strong>截止日期：</strong> ${data.deadline}</p>
-                        <label for="selectedOption">选择候选项：</label>
-                        <select id="selectedOption">
-                            ${data.options.map(option => `<option value="${option}">${option}</option>`).join('')}
-                        </select>
-                        <br>
-                        <button id="voteButton">投票</button>
-                    `;
-                    document.getElementById('voteButton').addEventListener('click', async () => {
-                        const selectedOption = document.getElementById('selectedOption').value;
-                        console.log('用户选择是: ', selectedOption);
-                        try {
-                            const voteResponse = await fetch(`/vote?contractAddress=${contractAddress}&selectedOption=${selectedOption}`, { method: 'POST' });
-                            if (!voteResponse.ok) {
-                                throw new Error('投票失败');
-                            }
-                            const ret = await voteResponse.json();
-                            if (ret.success) {
-                                alert(`您的选择是： ${selectedOption}，投票成功！`);
-                            } else {
-                                if (ret.message === '您已经投过票了') {
-                                    alert('您已经投过票了！');
-                                } else if (ret.message === '投票已经截止') {
-                                    alert('投票已经截止，无法继续投票。');
-                                } else {
-                                    alert('投票失败，请重试。');
-                                }
-                            }
-                        } catch (error) {
-                            console.error('投票时出错：', error);
-                            alert('投票失败，您已经对该项目完成投票。');
-                        }
-                    });
-                } catch (error) {
-                    console.error('获取投票项目信息时出错：', error);
-                    alert('获取投票项目信息失败，请检查合约地址是否正确。');
-                }
-            });
-        });
-    </script>
-</body>
-</html> -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -237,11 +83,8 @@
         window.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('joinButton').addEventListener('click', async () => {
                 const contractAddress = document.getElementById('contractAddress').value.trim();
-                console.log('加入的投票地址为:', contractAddress);
                 try {
                     const [publicKey] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                    console.log('当前连接的 MetaMask 用户地址:', publicKey);
-                    
                     const response = await fetch(`/getBallotInfo?contractAddress=${contractAddress}&publicKey=${publicKey}`);
                     if (!response.ok) {
                         throw new Error('获取投票项目信息失败');
@@ -277,7 +120,6 @@
                     `;
                     document.getElementById('voteButton').addEventListener('click', async () => {
                         const selectedOption = document.getElementById('selectedOption').value;
-                        console.log('用户选择是: ', selectedOption);
                         try {
                             const voteResponse = await fetch(`/vote?contractAddress=${contractAddress}&selectedOption=${selectedOption}&publicKey=${publicKey}`, { method: 'POST' });
                             if (!voteResponse.ok) {

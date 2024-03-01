@@ -30,6 +30,7 @@
             margin-bottom: 10px;
             border-radius: 4px;
             background-color: #f9f9f9;
+            cursor: pointer;
         }
         .contract-item:hover {
             background-color: #e9e9e9;
@@ -43,6 +44,26 @@
         canvas {
             margin-top: 20px;
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+        }
     </style>
 </head>
 <body>
@@ -51,8 +72,16 @@
         <div id="contracts-list"></div>
     </div>
 
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <canvas id="modal-chart"></canvas>
+        </div>
+    </div>
+
     <script>
         let currentContractCanvas = null;
+        let currentChart = null;
 
         // 获取 MetaMask 账户的函数
         async function getMetaMaskAccount() {
@@ -83,6 +112,7 @@
             try {
                 const data = await fetchContracts();
                 const contractsList = document.getElementById('contracts-list');
+                contractsList.innerHTML = ''; // 清空之前的合约列表
                 data.contracts.forEach(contract => {
                     const contractItem = document.createElement('div');
                     contractItem.classList.add('contract-item');
@@ -90,7 +120,7 @@
                         <p><strong>合约地址：</strong> ${contract.contract_address}</p>
                         <p><strong>截止日期：</strong> ${contract.deadline}</p>
                         <p><strong>投票项目：</strong> ${contract.vote_title}</p>
-                        <canvas class="vote-chart" style="display: none;"></canvas>
+                        <p><strong>投票状态：</strong> ${getVoteStatus(contract.deadline)}</p>
                     `;
                     contractItem.addEventListener('click', () => {
                         handleContractClick(contract, contractItem);
@@ -104,10 +134,11 @@
 
         // 处理合约点击事件
         async function handleContractClick(contract, contractItem) {
-            console.log('点击了合约:', contract.contract_address);
-            if (currentContractCanvas) {
-                currentContractCanvas.style.display = 'none'; // 隐藏先前合约的柱状图
+            // 销毁之前的 Canvas 元素和图表实例
+            if (currentChart) {
+                currentChart.destroy();
             }
+
             try {
                 const response = await fetch('/getContractDetails', {
                     method: 'POST',
@@ -117,26 +148,20 @@
                     body: JSON.stringify({ contractAddress: contract.contract_address })
                 });
                 const data = await response.json();
-                console.log('从后端收到的数据:', data);
-                displayVoteChart(data, contractItem);
+                displayModal(data);
             } catch (error) {
                 console.error('处理合约时出错:', error);
             }
         }
             
         // 显示投票项目柱状图
-        function displayVoteChart(data, contractItem) {
-            console.log('title:', data.title);
-            console.log('options:', data.options);
-            console.log('deadline:', data.deadline);
-            console.log('counts:', data.voteCounts);
-            const canvas = contractItem.querySelector('.vote-chart');
-            canvas.style.display = 'block';
-            currentContractCanvas = canvas; // 更新当前合约的 canvas 元素
-            
+        function displayModal(data) {
+            const modal = document.getElementById('myModal');
+            modal.style.display = 'block';
+
             // 渲染柱状图
-            const ctx = canvas.getContext('2d');
-            const chart = new Chart(ctx, {
+            const ctx = document.getElementById('modal-chart').getContext('2d');
+            currentChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: data.options,
@@ -156,6 +181,20 @@
                     }
                 }
             });
+
+            // 当点击模态框外部区域时，关闭模态框
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+        }
+
+        // 获取投票状态（已截止或正在进行中）
+        function getVoteStatus(deadline) {
+            const currentTimestamp = Math.floor(Date.now() / 1000);
+            const deadlineTimestamp = new Date(deadline).getTime() / 1000;
+            return currentTimestamp >= deadlineTimestamp ? '已截止' : '正在进行中';
         }
 
         // 当页面加载时调用显示合约的函数
