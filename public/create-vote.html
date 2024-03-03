@@ -101,6 +101,7 @@
             optionsContainer.innerHTML = ''; // 清空之前的选项
 
             if (numOptions !== '') {
+                const optionValues = new Set(); // 用于存储已添加的候选项值
                 for (let i = 1; i <= numOptions; i++) {
                     const label = document.createElement('label');
                     label.textContent = `候选项 ${i}：`;
@@ -110,7 +111,16 @@
                     input.type = 'text';
                     input.name = `option${i}`;
                     input.required = true;
+                    input.addEventListener('input', function(event) {
+                        const value = event.target.value.trim(); // 移除首尾空格
+                        if (value !== '' && optionValues.has(value)) {
+                            event.target.setCustomValidity('候选项的值不能重复');
+                        } else {
+                            event.target.setCustomValidity('');
+                        }
+                    });
                     optionsContainer.appendChild(input);
+                    optionValues.add(''); // 添加初始值，避免首次输入为空时的重复检查
 
                     optionsContainer.appendChild(document.createElement('br'));
                 }
@@ -156,39 +166,59 @@
                     // 添加 MetaMask 用户地址到数据中
                     data.metaMaskUser = metaMaskUser;
 
-                    fetch('/createVote', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('网络响应错误');
+                    // 检查候选项是否重复
+                    const optionValues = new Set();
+                    let hasDuplicate = false;
+                    for (let i = 1; i <= data.numOptions; i++) {
+                        const option = data[`option${i}`].trim(); // 移除首尾空格
+                        if (option !== '') {
+                            if (optionValues.has(option)) {
+                                hasDuplicate = true;
+                                break;
+                            } else {
+                                optionValues.add(option);
+                            }
                         }
-                        return response.json();
-                    })
-                    .then(data => {
-                        const messageElement = document.getElementById('message');
-                        if (data.success) {
-                            messageElement.textContent = `投票项目创建成功！合约地址：${data.contractAddress}`;
-                            messageElement.classList.add('success');
-                            // Redirect to index.html on successful creation
-                            setTimeout(() => {
-                                window.location.href = '/index.html';
-                            }, 1000); // Redirect after 2 seconds
-                        } else {
-                            messageElement.textContent = '投票项目创建失败，请稍后重试。';
+                    }
+
+                    if (hasDuplicate) {
+                        alert('候选项的值不能重复');
+                    } else {
+                        // 候选项没有重复，提交表单
+                        fetch('/createVote', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(data)
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error('网络响应错误');
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            const messageElement = document.getElementById('message');
+                            if (data.success) {
+                                messageElement.textContent = `投票项目创建成功！合约地址：${data.contractAddress}`;
+                                messageElement.classList.add('success');
+                                // Redirect to index.html on successful creation
+                                setTimeout(() => {
+                                    window.location.href = '/index.html';
+                                }, 1000); // Redirect after 2 seconds
+                            } else {
+                                messageElement.textContent = '投票项目创建失败，请稍后重试。';
+                                messageElement.classList.add('error');
+                            }
+                        }) 
+                        .catch(error => {
+                            console.error('发生错误：', error);
+                            const messageElement = document.getElementById('message');
+                            messageElement.textContent = '发生错误，请稍后重试。';
                             messageElement.classList.add('error');
-                        }
-                    }) 
-                    .catch(error => {
-                        console.error('发生错误：', error);
-                        const messageElement = document.getElementById('message');
-                        messageElement.textContent = '发生错误，请稍后重试。';
-                        messageElement.classList.add('error');
-                    });
+                        });
+                    }
                 });
             } catch (error) {
                 console.error('授权失败:', error);

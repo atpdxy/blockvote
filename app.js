@@ -19,7 +19,7 @@ const web3 = new Web3('http://localhost:7545');
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 流日志
-const stream = fs.createWriteStream("./log.txt");
+const stream = fs.createWriteStream("./log.txt", { flags: 'a' });
 const logger = pino(stream);
 
 // 使用 express.urlencoded() 中间件解析表单数据
@@ -51,9 +51,30 @@ function insertDataIntoBallots(creatorAddress, contractAddress, voteTitle, deadl
                 errorMessage: error.message,
                 stackTrace: error.stack
             });
-            console.error('插入数据时发生错误:', error);
             return;
         }
+    });
+}
+
+// 插入历史合约数据的函数
+function insertHistoryContract(contractAddress, voterAddress, voteTitle, deadline, userChoice) {
+    return new Promise((resolve, reject) => {
+        pool.getConnection((err, connection) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+
+            const query = 'INSERT INTO history_contracts (contract_address, voter_address, vote_title, deadline, user_choice, created_at) VALUES (?, ?, ?, ?, ?, NOW())';
+            connection.query(query, [contractAddress, voterAddress, voteTitle, deadline, userChoice], (error, results) => {
+                connection.release();
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(results);
+            });
+        });
     });
 }
   
@@ -61,10 +82,13 @@ function insertDataIntoBallots(creatorAddress, contractAddress, voteTitle, deadl
 process.on('SIGINT', () => {
   pool.end((err) => {
     if (err) {
-      console.error('关闭数据库连接时出错:', err);
-      process.exit(1);
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        process.exit(1);
     }
-    console.log('成功关闭数据库连接');
+    console.log('程序关闭，成功关闭数据库连接');
     logger.info('program broken (CTRL + C)');
     process.exit(0);
   });
@@ -84,7 +108,6 @@ app.post('/createVote', async (req, res) => {
     }
     // 获取截止时间的时间戳（毫秒）
     const deadlineTimestamp = new Date(formData.deadline).getTime();
-
     try {
         // 部署新的合约
         let newContractInstance = await new web3.eth.Contract(contractABI)
@@ -120,8 +143,6 @@ app.post('/createVote', async (req, res) => {
             errorMessage: error.message,
             stackTrace: error.stack
         });
-
-        console.error('部署合约时发生错误：', error);
         res.status(500).json({ error: 'Failed to deploy contract' });
     }
 });
@@ -161,7 +182,6 @@ async function initContract(voteTitle, options, deadlineTimestamp, metaMaskUser,
             errorMessage: error.message,
             stackTrace: error.stack
         });
-        console.error("调用合约函数时发生错误:", error);
     }
 }
 
@@ -188,7 +208,6 @@ app.get('/getBallotInfo', async (req, res) => {
             errorMessage: error.message,
             stackTrace: error.stack
         });
-        console.error('获取投票项目信息时出错：', error);
         res.status(500).json({ error: 'Failed to get ballot info' });
     }
 });
@@ -199,7 +218,6 @@ app.post('/getContracts', (req, res) => {
     const sql = `SELECT * FROM ballots WHERE creator_address = ?`;
     pool.query(sql, [userPublicKey], (error, results) => {
         if (error) {
-            console.error('Error fetching contracts:', error);
             logger.error({
                 message: 'Failed to get all contracts by current user',
                 userAddress: userPublicKey,
@@ -209,11 +227,30 @@ app.post('/getContracts', (req, res) => {
             res.status(500).json({ error: 'Failed to fetch contracts' });
             return;
         }
-
         res.json({ contracts: results });
     });
 });
 
+// 获取当前用户参加过的投票项目
+app.post('/getHistoryContracts', (req, res) => {
+    const userPublicKey = req.body.publicKey;
+    const sql = `SELECT * FROM history_contracts WHERE voter_address = ?`;
+    pool.query(sql, [userPublicKey], (error, results) => {
+        if (error) {
+            logger.error({
+                message: 'Failed to get all contracts by current user',
+                userAddress: userPublicKey,
+                errorMessage: error.message,
+                stackTrace: error.stack
+            });
+            res.status(500).json({ error: 'Failed to fetch contracts' });
+            return;
+        }
+        res.json({ contracts: results });
+    });
+});
+
+// 进行投票
 app.post('/vote', async (req, res) => {
     try {
         let result;
@@ -221,14 +258,12 @@ app.post('/vote', async (req, res) => {
         const selectedOption = req.query.selectedOption;
         const publicKey = req.query.publicKey;
         const contractInstance = new web3.eth.Contract(contractABI, contractAddress);
+
         // 调用合约实例的方法获取投票项目信息
         const deadlineTimestamp = await contractInstance.methods.getDeadline().call();
+        const voteTitle = await contractInstance.methods.getBallotTitle().call();
         // 获取当前时间戳
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        // 将时间戳转换为格式化的日期
-        const deadlineDate = new Date(Number(deadlineTimestamp));
-        const formattedDeadline = deadlineDate.toLocaleString();
-
+        const currentTimestamp = Math.floor(Date.now());
         // 如果当前时间晚于投票截止日期，则投票已经截至
         if (currentTimestamp >= deadlineTimestamp) {
             res.json({ success: false, message: '投票已经截止' });
@@ -245,7 +280,8 @@ app.post('/vote', async (req, res) => {
             from: publicKey, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
         });
-
+        const deadlineData = new Date(Number(deadlineTimestamp));
+        await insertHistoryContract(contractAddress, publicKey, voteTitle, deadlineData, selectedOption);
         // 发送响应
         res.json({ success: true });
     } catch (error) {
@@ -254,8 +290,101 @@ app.post('/vote', async (req, res) => {
             errorMessage: error.message,
             stackTrace: error.stack
         });
-        console.error('投票时出错：', error);
         res.status(500).json({ success: false, error: '投票失败' });
+    }
+});
+
+// 搜索合约的路由处理程序
+app.post('/searchContracts', async (req, res) => {
+    try {
+        const keyword = req.body.keyword;
+        const userPublicKey = req.body.userPublicKey;
+
+        // 构建 SQL 查询语句
+        let query;
+        let queryParams;
+        if (/^0x[a-fA-F0-9]{40}$/.test(keyword)) {
+            // 如果关键字是合约地址，则查询指定地址的合约信息
+            query = 'SELECT * FROM ballots WHERE contract_address = ? AND creator_address = ?';
+            queryParams = [keyword, userPublicKey];
+        } else {
+            // 如果关键字不是合约地址，则执行模糊查询
+            query = 'SELECT * FROM ballots WHERE (contract_address LIKE ? OR vote_title LIKE ?) AND creator_address = ?';
+            const searchTerm = '%' + keyword + '%';
+            queryParams = [searchTerm, searchTerm, userPublicKey];
+        }
+
+        // 执行数据库查询
+        pool.query(query, queryParams, (error, results, fields) => {
+            if (error) {
+                logger.error({
+                    errorMessage: error.message,
+                    stackTrace: error.stack
+                });
+                res.status(500).json({ message: '内部服务器错误' });
+                return;
+            }
+            if (results.length === 0) {
+                res.status(404).json({ message: '未找到匹配的合约或项目' });
+                return;
+            }
+            // 返回查询结果
+            res.json({ contracts: results });
+        });
+    } catch (error) {
+        logger.error({
+            message: 'Failed to search',
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        res.status(500).json({ message: '内部服务器错误' });
+    }
+});
+
+// 搜索历史合约的路由处理程序
+app.post('/searchHistoryContracts', async (req, res) => {
+    try {
+        const keyword = req.body.keyword;
+        const userPublicKey = req.body.userPublicKey;
+
+        // 构建 SQL 查询语句
+        let query;
+        let queryParams;
+        if (/^0x[a-fA-F0-9]{40}$/.test(keyword)) {
+            // 如果关键字是合约地址，则查询指定地址的合约信息
+            query = 'SELECT * FROM history_contracts WHERE contract_address = ? AND voter_address = ?';
+            queryParams = [keyword, userPublicKey];
+        } else {
+            // 如果关键字不是合约地址，则执行模糊查询
+            query = 'SELECT * FROM history_contracts WHERE (contract_address LIKE ? OR vote_title LIKE ?) AND voter_address = ?';
+            const searchTerm = '%' + keyword + '%';
+            queryParams = [searchTerm, searchTerm, userPublicKey];
+        }
+
+        // 执行数据库查询
+        pool.query(query, queryParams, (error, results, fields) => {
+            if (error) {
+                logger.error({
+                    errorMessage: error.message,
+                    stackTrace: error.stack
+                });
+                res.status(500).json({ message: '内部服务器错误' });
+                return;
+            }
+            if (results.length === 0) {
+                res.status(404).json({ message: '未找到匹配的合约或项目' });
+                return;
+            }
+            // 返回查询结果
+            res.json({ contracts: results });
+        });
+    } catch (error) {
+        logger.error({
+            message: 'Failed to search',
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        res.status(500).json({ message: '内部服务器错误' });
     }
 });
 
@@ -285,7 +414,6 @@ app.post('/getContractDetails', async (req, res) => {
             errorMessage: error.message,
             stackTrace: error.stack
         });
-        console.error('获取投票项目信息时出错：', error);
         res.status(500).json({ error: 'Failed to get ballot info' });
     }
 });

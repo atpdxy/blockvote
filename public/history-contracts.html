@@ -113,7 +113,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>当前用户创建的智能合约</h1>
+        <h1>当前用户参加的投票项目</h1>
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="搜索合约地址或投票项目名">
             <button id="searchButton" onclick="searchButtonClicked()">搜索</button>
@@ -173,7 +173,7 @@
         // 获取当前 MetaMask 账户的合约
         async function fetchContracts() {
             const userPublicKey = await getMetaMaskAccount();
-            const response = await fetch('/getContracts', {
+            const response = await fetch('/getHistoryContracts', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -190,7 +190,6 @@
                 contractsList.innerHTML = ''; // 清空之前的合约列表
                 pagination.innerHTML = ''; // 清空之前的分页按钮
                 const data = contractsData; // 使用传递进来的数据
-
                 const startIndex = (page - 1) * contractsPerPage;
                 const endIndex = Math.min(startIndex + contractsPerPage, data.contracts.length);
                 for (let i = startIndex; i < endIndex; i++) {
@@ -201,6 +200,7 @@
                         <p><strong>合约地址：</strong> ${contract.contract_address}</p>
                         <p><strong>截止日期：</strong> ${contract.deadline}</p>
                         <p><strong>投票项目：</strong> ${contract.vote_title}</p>
+                        <p><strong>您的选择：</strong> ${contract.user_choice}</p>
                         <p><strong>投票状态：</strong> ${getVoteStatus(contract.deadline)}</p>
                     `;
                     contractItem.addEventListener('click', () => {
@@ -324,7 +324,7 @@
             }
             try {
                 const userPublicKey = await getMetaMaskAccount(); // 获取用户的公钥
-                const response = await fetch('/searchContracts', {
+                const response = await fetch('/searchHistoryContracts', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -332,11 +332,7 @@
                     body: JSON.stringify({ keyword, userPublicKey })
                 });
                 contractsData = await response.json(); // 更新数据
-                if (contractsData && contractsData.contracts && contractsData.contracts.length === 0) {
-                    alert('没有相关记录!');
-                } else {
-                    displayContracts(currentPage); // 显示搜索结果
-                }
+                displayContracts(currentPage);
             } catch (error) {
                 console.error('搜索合约时出错:', error);
             }

@@ -71,6 +71,7 @@
             <button id="createVote" class="button">发起投票</button>
             <button id="joinVote" class="button">加入投票</button>
             <button id="myVotes" class="button">我的投票</button>
+            <button id="historyContracts" class="button">查看历史合约</button>
         </div>
         <div id="contractInfo" class="contract-info"></div>
     </div>
@@ -119,6 +120,11 @@
         document.getElementById('myVotes').addEventListener('click', () => {
             window.location.href = '/my-votes.html';
         });
+
+        // 点击查看历史合约跳转到历史合约界面
+        document.getElementById('historyContracts').addEventListener('click', () => {
+            window.location.href = '/history-contracts.html'; // 修改为历史合约页面的 URL
+        });        
     </script>
 </body>
 </html>
