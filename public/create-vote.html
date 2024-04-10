@@ -203,6 +203,12 @@
                             if (data.success) {
                                 messageElement.textContent = `投票项目创建成功！合约地址：${data.contractAddress}`;
                                 messageElement.classList.add('success');
+
+                                // 将合约地址复制到剪贴板
+                                navigator.clipboard.writeText(data.contractAddress)
+                                .then(() => console.log('合约地址已复制到剪贴板'))
+                                .catch(err => console.error('复制到剪贴板失败：', err));
+
                                 // Redirect to index.html on successful creation
                                 setTimeout(() => {
                                     window.location.href = '/index.html';

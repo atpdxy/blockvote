@@ -2,6 +2,7 @@
 const express = require('express');
 const app = express();
 const path = require('path');
+const { Level } = require('level')
 const fs = require("fs");
 const pino = require('pino');
 const Web3 = require('web3');
@@ -12,6 +13,8 @@ const VotingSystemContract = require('./build/contracts/VotingSystem.json');
 const contractABI = VotingSystemContract.abi;
 const contractBytecode = VotingSystemContract.bytecode;
 
+// 打开或创建leveldb数据库
+const db = new Level('ethereum', { valueEncoding: 'json' })
 // 连接到以太坊网络
 const web3 = new Web3('http://localhost:7545');
 
@@ -36,6 +39,16 @@ const pool = mysql.createPool({
     database: 'blockvote'
 });
   
+// 存储区块信息到数据库
+async function saveBlockData(blockData) {
+    await db.put(blockData.blockHash, blockData);
+}
+
+// 根据区块哈希检索区块信息
+async function getBlockData(blockHash) {
+    return await db.get(blockHash);
+}
+
 // 将MySQL连接池添加到Express应用程序的本地变量中
 app.locals.pool = pool;
 
@@ -94,6 +107,11 @@ process.on('SIGINT', () => {
   });
 });
 
+// 提供管理员界面
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // 创建 POST 路由处理前端提交的表单数据
 app.post('/createVote', async (req, res) => {
     // 从请求体中提取表单数据
@@ -106,6 +124,7 @@ app.post('/createVote', async (req, res) => {
     for (let i = 1; i <= numOptions; i++) {
         options.push(formData['option' + i]);
     }
+
     // 获取截止时间的时间戳（毫秒）
     const deadlineTimestamp = new Date(formData.deadline).getTime();
     try {
@@ -113,7 +132,7 @@ app.post('/createVote', async (req, res) => {
         let newContractInstance = await new web3.eth.Contract(contractABI)
             .deploy({
                 data: contractBytecode,
-                arguments: [voteTitle, options, deadlineTimestamp] // 如果合约有构造函数参数，将它们传递给 arguments
+                arguments: [voteTitle, options, deadlineTimestamp] // 传递合约到构造函数中，但是由于本地字节码是源码的，需要再次调用合约函数
             })
             .send({
                 from: metaMaskUser, // 使用全局变量中存储的调用者地址来部署合约
@@ -136,10 +155,31 @@ app.post('/createVote', async (req, res) => {
         insertDataIntoBallots(metaMaskUser, newContractInstance.options.address, voteTitle, formData.deadline);
 
         initContract(voteTitle, options, deadlineTimestamp, metaMaskUser, newContractInstance);
+        // 部署合约成功后获取区块和交易信息
+        // 获取最新区块的信息
+        const block = await web3.eth.getBlock('latest');
+        const blockData = {
+            blockId: block.number,
+            timestamp: block.timestamp,
+            blockHash: block.hash,
+            parentHash: block.parentHash,
+            difficulty: block.difficulty,
+            miner: block.miner,
+            stateRoot: block.stateRoot,
+            transactionsRoot: block.transactionsRoot,
+            receiptsRoot: block.receiptsRoot,
+            txHash: block.transactions,
+            gasUsed: block.gasUsed,
+            gasLimit: block.gasLimit,
+            fromAddress: metaMaskUser,
+            toAddress: newContractInstance.options.address,
+            uncles: block.uncles
+        };
+        // 保存区块信息到leveldb数据库
+        await saveBlockData(blockData);
     } catch (error) {
         // 记录出错时的日志信息
         logger.error({
-            message: 'Failed to create new contract',
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -176,9 +216,6 @@ async function initContract(voteTitle, options, deadlineTimestamp, metaMaskUser,
     } catch (error) {
         // 记录错误日志
         logger.error({
-            message: 'Failed to initalize a contract',
-            callerAddress: metaMaskUser,
-            contract: newContractInstance,
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -204,7 +241,6 @@ app.get('/getBallotInfo', async (req, res) => {
         res.json({ options, title, deadline: formattedDeadline });
     } catch (error) {
         logger.error({
-            message: 'Failed to get details from contract',
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -215,12 +251,10 @@ app.get('/getBallotInfo', async (req, res) => {
 // 获取当前用户创建的智能合约
 app.post('/getContracts', (req, res) => {
     const userPublicKey = req.body.publicKey;
-    const sql = `SELECT * FROM ballots WHERE creator_address = ?`;
+    const sql = `SELECT * FROM ballots WHERE creator_address = ? AND deleted = false`;
     pool.query(sql, [userPublicKey], (error, results) => {
         if (error) {
             logger.error({
-                message: 'Failed to get all contracts by current user',
-                userAddress: userPublicKey,
                 errorMessage: error.message,
                 stackTrace: error.stack
             });
@@ -231,6 +265,27 @@ app.post('/getContracts', (req, res) => {
     });
 });
 
+
+app.post('/deleteContract', (req, res) => {
+    const contractAddress = req.body.contractAddress;
+    const publicKey = req.body.publicKey;
+    console.log(contractAddress);
+    console.log(publicKey);
+    // 检查用户是否有权限删除合约，这里可以根据实际需求进行权限验证
+
+    // 更新数据库中对应合约的 deleted 字段为真
+    const queryString = 'UPDATE ballots SET deleted = true WHERE contract_address = ? AND creator_address = ?';
+    pool.query(queryString, [contractAddress, publicKey], (err, result) => {
+        if (err) {
+            console.error('更新数据库时出错:', err);
+            res.status(500).json({ success: false, message: '合约删除失败' });
+            return;
+        }
+        console.log('合约删除成功');
+        res.json({ success: true, message: '合约删除成功' });
+    });
+});
+
 // 获取当前用户参加过的投票项目
 app.post('/getHistoryContracts', (req, res) => {
     const userPublicKey = req.body.publicKey;
@@ -238,8 +293,6 @@ app.post('/getHistoryContracts', (req, res) => {
     pool.query(sql, [userPublicKey], (error, results) => {
         if (error) {
             logger.error({
-                message: 'Failed to get all contracts by current user',
-                userAddress: userPublicKey,
                 errorMessage: error.message,
                 stackTrace: error.stack
             });
@@ -255,7 +308,7 @@ app.post('/vote', async (req, res) => {
     try {
         let result;
         const contractAddress = req.query.contractAddress;
-        const selectedOption = req.query.selectedOption;
+        const selectedOption = decodeURIComponent(req.query.selectedOption);
         const publicKey = req.query.publicKey;
         const contractInstance = new web3.eth.Contract(contractABI, contractAddress);
 
@@ -286,7 +339,6 @@ app.post('/vote', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error({
-            message: 'Failed to vote',
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -333,7 +385,6 @@ app.post('/searchContracts', async (req, res) => {
         });
     } catch (error) {
         logger.error({
-            message: 'Failed to search',
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -380,7 +431,6 @@ app.post('/searchHistoryContracts', async (req, res) => {
         });
     } catch (error) {
         logger.error({
-            message: 'Failed to search',
             errorMessage: error.message,
             stackTrace: error.stack
         });
@@ -409,8 +459,6 @@ app.post('/getContractDetails', async (req, res) => {
         res.json({ options, title, deadline: formattedDeadline, voteCounts });
     } catch (error) {
         logger.error({
-            message: 'Failed to get details from a contract',
-            contractAddress: contractAddress,
             errorMessage: error.message,
             stackTrace: error.stack
         });

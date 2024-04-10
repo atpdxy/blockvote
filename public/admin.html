@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投票系统</title>
+    <!-- 这里包含你的样式表链接和其他的头部信息 -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .sidebar {
+            width: 200px;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #333;
+            padding-top: 20px;
+        }
+
+        .sidebar ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar ul li {
+            padding: 10px;
+        }
+
+        .sidebar ul li a {
+            text-decoration: none;
+            color: #fff;
+            display: block;
+        }
+
+        .content {
+            margin-left: 220px; /* 为了避免导航栏遮挡内容，设置一个左边距 */
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧导航栏 -->
+    <div class="sidebar">
+        <ul>
+            <li><a href="#" id="myAccount">我的账户</a></li>
+            <li><a href="#" id="createVote">创建投票</a></li>
+            <li><a href="#" id="joinVote">加入投票</a></li>
+            <li><a href="#" id="myVotes">我的投票</a></li>
+        </ul>
+    </div>
+
+    <!-- 右侧内容区域 -->
+    <div class="content" id="content">
+        <!-- 这里将显示点击导航栏后的内容 -->
+    </div>
+
+    <!-- 这里包含你的脚本链接，包括导航栏的点击事件处理程序 -->
+    <script>
+        // 在页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', () => {
+            // 获取左侧导航栏中的元素
+            const myAccount = document.getElementById('myAccount');
+            const createVote = document.getElementById('createVote');
+            const joinVote = document.getElementById('joinVote');
+            const myVotes = document.getElementById('myVotes');
+            const content = document.getElementById('content');
+
+            // 监听左侧导航栏中的点击事件
+            myAccount.addEventListener('click', () => {
+                // 加载我的账户页面到右侧内容区域
+                fetchAndRender('index_backup.html');
+            });
+
+            createVote.addEventListener('click', () => {
+                // 加载创建投票页面到右侧内容区域
+                fetchAndRender('create-vote.html');
+            });
+
+            joinVote.addEventListener('click', () => {
+                // 加载加入投票页面到右侧内容区域
+                fetchAndRender('join-vote.html');
+            });
+
+            myVotes.addEventListener('click', () => {
+                // 加载我的投票页面到右侧内容区域
+                fetchAndRender('my-votes.html');
+            });
+
+            // 定义一个函数，用于从服务器获取并渲染页面内容
+            async function fetchAndRender(url) {
+                try {
+                    const response = await fetch(url);
+                    const html = await response.text();
+                    content.innerHTML = html;
+                } catch (error) {
+                    console.error('加载页面时出错:', error);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

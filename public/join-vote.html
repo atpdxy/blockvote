@@ -72,19 +72,24 @@
 <body>
     <div class="container">
         <h1>加入投票</h1>
+        <!-- 输入合约地址和按钮 -->
         <label for="contractAddress">合约地址：</label>
         <input type="text" id="contractAddress" name="contractAddress" placeholder="在此输入合约地址" required>
         <button id="joinButton">加入</button>
 
+        <!-- 投票信息显示区域 -->
         <div id="voteInfo"></div>
     </div>
 
     <script>
         window.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('joinButton').addEventListener('click', async () => {
+                // 获取用户输入的合约地址
                 const contractAddress = document.getElementById('contractAddress').value.trim();
                 try {
+                    // 请求 MetaMask 授权
                     const [publicKey] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    // 发送请求获取投票信息
                     const response = await fetch(`/getBallotInfo?contractAddress=${contractAddress}&publicKey=${publicKey}`);
                     if (!response.ok) {
                         throw new Error('获取投票项目信息失败');
@@ -118,17 +123,23 @@
                         <br>
                         <button id="voteButton">投票</button>
                     `;
+                    // 添加投票按钮点击事件处理逻辑
                     document.getElementById('voteButton').addEventListener('click', async () => {
                         const selectedOption = document.getElementById('selectedOption').value;
+                        const selectedOptionEncoded = encodeURIComponent(selectedOption);
                         try {
-                            const voteResponse = await fetch(`/vote?contractAddress=${contractAddress}&selectedOption=${selectedOption}&publicKey=${publicKey}`, { method: 'POST' });
+                            // 发送投票请求
+                            const voteResponse = await fetch(`/vote?contractAddress=${contractAddress}&selectedOption=${selectedOptionEncoded}&publicKey=${publicKey}`, { method: 'POST' });
                             if (!voteResponse.ok) {
                                 throw new Error('投票失败');
                             }
                             const ret = await voteResponse.json();
                             if (ret.success) {
+                                // 提示投票成功并跳转到index.html界面
                                 alert(`您的选择是： ${selectedOption}，投票成功！`);
+                                window.location.href = 'index.html';
                             } else {
+                                // 处理投票失败情况
                                 if (ret.message === '您已经投过票了') {
                                     alert('您已经投过票了！');
                                 } else if (ret.message === '投票已经截止') {
