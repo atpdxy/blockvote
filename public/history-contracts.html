@@ -75,16 +75,19 @@
             text-align: center;
         }
         .pagination button {
-            background-color: #4CAF50;
-            color: white;
+            background-color: white; /* 将背景颜色改为白色 */
+            color: #4CAF50;
             padding: 8px 16px;
             margin: 0 5px;
-            border: none;
+            border: 1px solid #4CAF50; /* 添加边框 */
             border-radius: 4px;
             cursor: pointer;
         }
+
         .pagination button.active {
             background-color: #45a049;
+            color: white;
+            border: 1px solid #45a049; /* 添加边框 */
         }
         .search-box {
             margin-bottom: 20px;
