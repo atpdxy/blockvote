@@ -295,30 +295,68 @@
             return currentTimestamp >= deadlineTimestamp ? '已截止' : '正在进行中';
         }
 
-        // 渲染分页按钮
         function renderPagination(totalContracts, currentPage) {
             const totalPages = Math.ceil(totalContracts / contractsPerPage);
             const pagination = document.getElementById('pagination');
             pagination.innerHTML = ''; // 清空之前的分页按钮
-            for (let i = 1; i <= totalPages; i++) {
+
+            // 计算起始页和结束页
+            let startPage, endPage;
+            if (totalPages <= 5 || currentPage <= 3) {
+                startPage = 1;
+                endPage = Math.min(totalPages, 5);
+            } else if (currentPage + 2 >= totalPages) {
+                startPage = totalPages - 4;
+                endPage = totalPages;
+            } else {
+                startPage = currentPage - 2;
+                endPage = currentPage + 2;
+            }
+
+            // 添加上一页按钮
+            if (currentPage > 1) {
+                const prevButton = document.createElement('button');
+                prevButton.innerText = '上一页';
+                prevButton.addEventListener('click', () => {
+                    currentPage--;
+                    displayContracts(currentPage);
+                    highlightActivePageButton(currentPage);
+                });
+                pagination.appendChild(prevButton);
+            }
+
+            // 添加页码按钮
+            for (let i = startPage; i <= endPage; i++) {
                 const pageButton = document.createElement('button');
-                pageButton.classList.add('page-button');
+                pageButton.innerText = i;
                 if (i === currentPage) {
                     pageButton.classList.add('active');
                 }
-                pageButton.innerText = i;
                 pageButton.addEventListener('click', () => {
                     currentPage = i;
-                    displayContracts(currentPage); // 重新显示当前页的合约列表
-                    highlightActivePageButton(currentPage); // 更新分页按钮的样式
+                    displayContracts(currentPage);
+                    highlightActivePageButton(currentPage);
                 });
                 pagination.appendChild(pageButton);
             }
+
+            // 添加下一页按钮
+            if (currentPage < totalPages) {
+                const nextButton = document.createElement('button');
+                nextButton.innerText = '下一页';
+                nextButton.addEventListener('click', () => {
+                    currentPage++;
+                    displayContracts(currentPage);
+                    highlightActivePageButton(currentPage);
+                });
+                pagination.appendChild(nextButton);
+            }
         }
+
 
         // 高亮显示当前页面按钮
         function highlightActivePageButton(currentPage) {
-            const pageButtons = document.querySelectorAll('.page-button');
+            const pageButtons = document.querySelectorAll('.pagination button');
             pageButtons.forEach(button => {
                 button.classList.remove('active');
                 if (parseInt(button.innerText) === currentPage) {

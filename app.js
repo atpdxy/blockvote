@@ -2,7 +2,7 @@
 const express = require('express');
 const app = express();
 const path = require('path');
-const { Level } = require('level')
+const { Level } = require('level');
 const fs = require("fs");
 const pino = require('pino');
 const Web3 = require('web3');
@@ -14,7 +14,7 @@ const contractABI = VotingSystemContract.abi;
 const contractBytecode = VotingSystemContract.bytecode;
 
 // 打开或创建leveldb数据库
-const db = new Level('ethereum', { valueEncoding: 'json' })
+    const db = new Level('ethereum', { valueEncoding: 'json' })
 // 连接到以太坊网络
 const web3 = new Web3('http://localhost:7545');
 
@@ -105,11 +105,6 @@ process.on('SIGINT', () => {
     logger.info('program broken (CTRL + C)');
     process.exit(0);
   });
-});
-
-// 提供管理员界面
-app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // 创建 POST 路由处理前端提交的表单数据
@@ -221,6 +216,42 @@ async function initContract(voteTitle, options, deadlineTimestamp, metaMaskUser,
         });
     }
 }
+
+// 查询整个网络上的区块
+app.get('/ethereum', async  (req, res) => {
+    try {
+        // 创建一个空数组来存储从 Leveldb 中检索的数据
+        const blockDataArray = [];
+
+        // 使用 createReadStream 方法从 Leveldb 中读取数据
+        db.createReadStream()
+            .on('data', function (data) {
+                // 将每个键值对添加到 blockDataArray 数组中
+                blockDataArray.push(data);
+            })
+            .on('error', function (error) {
+                // 如果发生错误，则向客户端发送错误响应
+                logger.error({
+                    errorMessage: error.message,
+                    stackTrace: error.stack
+                });
+                console.error('Error while reading data from Leveldb:', error);
+                res.status(500).json({ success: false, error: 'Failed to read data from Leveldb' });
+            })
+            .on('end', function () {
+                // 当读取结束时，将 blockDataArray 数组发送到前端
+                res.json({ success: true, data: blockDataArray });
+            });
+    } catch (error) {
+        // 如果发生错误，则向客户端发送错误响应
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        console.error('Error while retrieving data from Leveldb:', error);
+        res.status(500).json({ success: false, error: 'Failed to retrieve data from Leveldb' });
+    }
+});
 
 app.get('/getBallotInfo', async (req, res) => {
     try {

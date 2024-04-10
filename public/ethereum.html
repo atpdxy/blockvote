@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新闻分页</title>
+    <style>
+        body {
+            background-color: #f8f8f8;
+        }
+        .new-main {
+            width: 40%;
+            margin: 100px auto 20px;
+            padding: 15px;
+            background-color: #fff;
+        }
+        .new-main .item {
+            margin-bottom: 20px;
+        }
+        .new-main .item-title {
+            text-align: left;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .pagination-container {
+            text-align: center;
+        }
+        .pagination {
+            display: inline-block;
+        }
+        .pagination a {
+            background-color: #999;
+            color: #fff;
+            padding: 1px 6px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        .pagination a.active {
+            background-color: #85D1FF;
+        }
+        .page-change {
+            margin: 0 15px;
+            cursor: pointer;
+        }
+        .skip input {
+            width: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <!-- 新闻容器 -->
+        <div class="new-main"></div>
+        <!-- 分页容器 -->
+        <div class="pagination-container">
+            <span class="page-change prev">上一页</span>
+            <div class="pagination"></div>
+            <span class="page-change next">下一页</span>
+        </div>
+    </div>
+
+    <script>
+
+        let newMain = document.querySelector('.new-main'); // 新闻容器
+        let pagination = document.querySelector('.pagination'); // 分页容器
+        let pageCount = Math.ceil(newsData.length / 5); // 根据数据的长度计算总共几页
+        let newsDataRender = []; // 每页要显示的数据
+        let p = 1; // 根据 p 值显示每页的数据
+
+        // 渲染页面函数
+        let render = () => {
+            newMain.innerHTML = '';
+            newsDataRender = newsData.slice((p - 1) * 5, 5 * p); // 每页要显示的数据，一页显示 5 条
+            newsDataRender.forEach((item, index) => {
+                newMain.innerHTML += `<div class="item">
+                    <div class="item-title">${item.title}</div>
+                    <div class="item-content">${item.content}</div>
+                </div>`;
+            });
+        };
+
+        // 初始化页面
+        render();
+
+        // 渲染分页
+        for (let i = 1; i <= pageCount; i++) {
+            pagination.innerHTML += `<a>${i}</a>`;
+        }
+        pagination.innerHTML += `<span class="skip">跳转至 <input type="text"> </span>`; // 获取页数
+
+        let asAll = pagination.querySelectorAll('a');
+
+        // 页面刚进来时第一页高亮
+        asAll[p - 1].classList.add('active');
+
+        // 遍历总页数
+        asAll.forEach((item, index) => {
+            // 点击页数
+            item.onclick = function () {
+                for (let j = 0; j < asAll.length; j++) {
+                    asAll[j].classList.remove('active');
+                }
+                this.classList.add('active');
+                p = index + 1; // 点击页数，改变 p 的值，以改变这个页面要显示的数据，达到分页的效果
+                render(); // 重新渲染页面
+            };
+        });
+
+        // 获取跳转 input 框
+        let skipInput = document.querySelector('.skip input');
+
+        // 触发 Enter 键实现跳转到输入页
+        skipInput.onkeydown = function (ev) {
+            if (ev.keyCode == 13 && skipInput.value != '') {
+                // 移除每个页数按钮的 active
+                for (let j = 0; j < asAll.length; j++) {
+                    asAll[j].classList.remove('active');
+                }
+                p = ev.target.value;
+
+                // 给当前的页数按钮添加上 active
+                asAll[p - 1].classList.add('active');
+
+                if (p > asAll.length) {
+                    return;
+                }
+
+                // 重新渲染页面
+                render();
+            }
+        };
+
+        // 点击上一页下一页，改变高亮
+        let changePageClass = () => {
+            for (let j = 0; j < asAll.length; j++) {
+                asAll[j].classList.remove('active');
+            }
+            asAll[p - 1].classList.add('active');
+        };
+
+        // 上一页
+        let prev = document.querySelector('.prev');
+        prev.onclick = function (e) {
+            if (p <= 1) {
+                console.log(p);
+                return;
+            } else {
+                p = p - 1;
+                changePageClass();
+                render();
+            }
+        };
+
+        // 下一页
+        let next = document.querySelector('.next');
+        next.onclick = function () {
+            if (p >= asAll.length) {
+                return;
+            }
+            p = p + 1;
+            changePageClass();
+            render();
+        };
+    </script>
+</body>
+</html>
