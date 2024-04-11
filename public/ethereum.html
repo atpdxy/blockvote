@@ -1,169 +1,295 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>新闻分页</title>
+    <title>Block Data</title>
     <style>
         body {
-            background-color: #f8f8f8;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
         }
-        .new-main {
-            width: 40%;
-            margin: 100px auto 20px;
-            padding: 15px;
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
             background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        .new-main .item {
+        .block {
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .block:hover {
+            background-color: #e0e0e0;
+        }
+        .block p {
+            margin: 5px 0;
+            padding: 0;
+        }
+        .block p:first-child {
+            margin-top: 0;
+            font-weight: bold;
+        }
+        .block-details {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .block-details h2 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        .block-details p {
+            margin: 5px 0;
+            padding: 0;
+        }
+        .block-details p:first-child {
+            margin-top: 0;
+            font-weight: bold;
+        }
+        .search-container {
+            text-align: center;
             margin-bottom: 20px;
         }
-        .new-main .item-title {
-            text-align: left;
-            padding: 15px;
-            font-weight: bold;
-            font-size: 18px;
+        .search-container input[type="text"] {
+            padding: 10px;
+            border-radius: 20px;
+            border: 1px solid #ccc;
+            margin-right: 10px;
+            width: 60%;
+            max-width: 400px;
+            outline: none;
         }
-        .pagination-container {
-            text-align: center;
+        .search-container button {
+            background-color: #fff;
+            color: #000;
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .search-container button:hover {
+            background-color: #f0f0f0;
+        }
+        .search-container button:focus {
+            outline: none;
         }
         .pagination {
-            display: inline-block;
+            text-align: center;
+            margin-top: 20px;
         }
-        .pagination a {
-            background-color: #999;
-            color: #fff;
-            padding: 1px 6px;
-            text-decoration: none;
-            border-radius: 5px;
-            margin-right: 10px;
+        .pagination button {
+            background-color: #fff;
+            color: #000;
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
             cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 0 5px;
         }
-        .pagination a.active {
-            background-color: #85D1FF;
+        .pagination button:hover {
+            background-color: #f0f0f0;
         }
-        .page-change {
-            margin: 0 15px;
-            cursor: pointer;
+        .pagination button:focus {
+            outline: none;
         }
-        .skip input {
-            width: 50px;
+        .pagination button.active {
+            background-color: gray;
         }
     </style>
 </head>
 <body>
-    <div class="main">
-        <!-- 新闻容器 -->
-        <div class="new-main"></div>
-        <!-- 分页容器 -->
-        <div class="pagination-container">
-            <span class="page-change prev">上一页</span>
-            <div class="pagination"></div>
-            <span class="page-change next">下一页</span>
-        </div>
-    </div>
-
+    <div class="container">
+        <h1 style="text-align: center;">区块详情</h1>
+        <form id="searchForm" onsubmit="searchBlock(); return false;">
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="输入哈希值或Block ID搜索">
+                <button type="submit">搜索</button>
+            </div>
+        </form>
+        <div id="blockData"></div>
+        <div class="pagination" id="pagination"></div>
+    </div>    
     <script>
+        const dataPerPage = 5;
+        let currentPage = 1;
+        let currentBlocks = [];
 
-        let newMain = document.querySelector('.new-main'); // 新闻容器
-        let pagination = document.querySelector('.pagination'); // 分页容器
-        let pageCount = Math.ceil(newsData.length / 5); // 根据数据的长度计算总共几页
-        let newsDataRender = []; // 每页要显示的数据
-        let p = 1; // 根据 p 值显示每页的数据
+        fetch('/allBlocks')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    currentBlocks = data.data;
+                    renderBlockData(currentBlocks, currentPage);
+                } else {
+                    console.error('Error fetching block data:', data.error);
+                }
+            })
+            .catch(error => console.error('Error fetching block data:', error));
 
-        // 渲染页面函数
-        let render = () => {
-            newMain.innerHTML = '';
-            newsDataRender = newsData.slice((p - 1) * 5, 5 * p); // 每页要显示的数据，一页显示 5 条
-            newsDataRender.forEach((item, index) => {
-                newMain.innerHTML += `<div class="item">
-                    <div class="item-title">${item.title}</div>
-                    <div class="item-content">${item.content}</div>
-                </div>`;
+        let currentDetailsElement = null;
+
+        function renderBlockData(data, page) {
+            const startIndex = (page - 1) * dataPerPage;
+            const endIndex = startIndex + dataPerPage;
+            const paginatedData = data.slice(startIndex, endIndex);
+
+            const blockDataContainer = document.getElementById('blockData');
+            blockDataContainer.innerHTML = '';
+
+            paginatedData.forEach(block => {
+                const blockElement = document.createElement('div');
+                blockElement.classList.add('block');
+                blockElement.innerHTML = `
+                    <p><strong>Block ID:</strong> ${block.blockID}</p>
+                    <p><strong>Hash Value:</strong> ${block.hashValue}</p>
+                `;
+                blockElement.addEventListener('click', () => {
+                    if (currentDetailsElement) {
+                        currentDetailsElement.remove();
+                    }
+                    sendHashToBackend(block.hashValue, blockElement);
+                });
+                blockDataContainer.appendChild(blockElement);
             });
-        };
 
-        // 初始化页面
-        render();
-
-        // 渲染分页
-        for (let i = 1; i <= pageCount; i++) {
-            pagination.innerHTML += `<a>${i}</a>`;
+            renderPagination(data.length);
         }
-        pagination.innerHTML += `<span class="skip">跳转至 <input type="text"> </span>`; // 获取页数
 
-        let asAll = pagination.querySelectorAll('a');
-
-        // 页面刚进来时第一页高亮
-        asAll[p - 1].classList.add('active');
-
-        // 遍历总页数
-        asAll.forEach((item, index) => {
-            // 点击页数
-            item.onclick = function () {
-                for (let j = 0; j < asAll.length; j++) {
-                    asAll[j].classList.remove('active');
+        function sendHashToBackend(hashValue, blockElement) {
+            fetch('/blockDetails', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ hash: hashValue })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to send hash to backend');
                 }
-                this.classList.add('active');
-                p = index + 1; // 点击页数，改变 p 的值，以改变这个页面要显示的数据，达到分页的效果
-                render(); // 重新渲染页面
-            };
-        });
-
-        // 获取跳转 input 框
-        let skipInput = document.querySelector('.skip input');
-
-        // 触发 Enter 键实现跳转到输入页
-        skipInput.onkeydown = function (ev) {
-            if (ev.keyCode == 13 && skipInput.value != '') {
-                // 移除每个页数按钮的 active
-                for (let j = 0; j < asAll.length; j++) {
-                    asAll[j].classList.remove('active');
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    renderBlockDetails(data.data, blockElement);
+                } else {
+                    throw new Error(data.error);
                 }
-                p = ev.target.value;
+            })
+            .catch(error => {
+                console.error('Error sending hash to backend:', error.message);
+            });
+        }
 
-                // 给当前的页数按钮添加上 active
-                asAll[p - 1].classList.add('active');
+        function renderBlockDetails(blockData, blockElement) {
+            const blockDetailsContainer = document.createElement('div');
+            blockDetailsContainer.classList.add('block-details');
+            blockDetailsContainer.innerHTML = `
+                <h2>区块详情如下：</h2>
+                <p><strong>Block ID:</strong> ${blockData.blockId}</p>
+                <p><strong>Timestamp:</strong> ${new Date(blockData.timestamp * 1000)}</p>
+                <p><strong>Block Hash:</strong> ${blockData.blockHash}</p>
+                <p><strong>Parent Hash:</strong> ${blockData.parentHash}</p>
+                <p><strong>Difficulty:</strong> ${blockData.difficulty}</p>
+                <p><strong>Miner:</strong> ${blockData.miner}</p>
+                <p><strong>State Root:</strong> ${blockData.stateRoot}</p>
+                <p><strong>Transactions Root:</strong> ${blockData.transactionsRoot}</p>
+                <p><strong>Receipts Root:</strong> ${blockData.receiptsRoot}</p>
+                <p><strong>Transactions:</strong> ${blockData.txHash.join(', ')}</p>
+                <p><strong>Gas Used:</strong> ${blockData.gasUsed}</p>
+                <p><strong>Gas Limit:</strong> ${blockData.gasLimit}</p>
+                <p><strong>From Address:</strong> ${blockData.fromAddress}</p>
+                <p><strong>To Address:</strong> ${blockData.toAddress}</p>
+                <p><strong>Uncles:</strong> ${blockData.uncles.join(', ')}</p>
+            `;
+            blockElement.appendChild(blockDetailsContainer);
+            currentDetailsElement = blockDetailsContainer;
+        }
 
-                if (p > asAll.length) {
-                    return;
-                }
+        function searchBlock() {
+            const searchTerm = document.getElementById('searchInput').value.trim();
+            let filteredBlocks;
 
-                // 重新渲染页面
-                render();
+            if (searchTerm === '') { 
+                renderBlockData(currentBlocks, 1); 
+                return; 
             }
-        };
 
-        // 点击上一页下一页，改变高亮
-        let changePageClass = () => {
-            for (let j = 0; j < asAll.length; j++) {
-                asAll[j].classList.remove('active');
-            }
-            asAll[p - 1].classList.add('active');
-        };
-
-        // 上一页
-        let prev = document.querySelector('.prev');
-        prev.onclick = function (e) {
-            if (p <= 1) {
-                console.log(p);
-                return;
+            if (!isNaN(searchTerm)) { 
+                filteredBlocks = currentBlocks.filter(block =>
+                    block.blockID.toString() === searchTerm
+                );
             } else {
-                p = p - 1;
-                changePageClass();
-                render();
+                filteredBlocks = currentBlocks.filter(block =>
+                    block.hashValue.toLowerCase().includes(searchTerm.toLowerCase())
+                );
             }
-        };
+            renderBlockData(filteredBlocks, 1);
+        }
 
-        // 下一页
-        let next = document.querySelector('.next');
-        next.onclick = function () {
-            if (p >= asAll.length) {
-                return;
+        function renderPagination(totalItems) {
+            const totalPages = Math.ceil(totalItems / dataPerPage);
+            const paginationContainer = document.getElementById('pagination');
+            paginationContainer.innerHTML = '';
+
+            if (totalPages > 1) {
+                const maxVisiblePages = 5;
+                let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+                if (endPage - startPage < maxVisiblePages - 1) {
+                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                }
+
+                const prevButton = createPaginationButton('上一页', () => {
+                    if (currentPage > 1) {
+                        currentPage--;
+                        renderBlockData(currentBlocks, currentPage);
+                    }
+                });
+                paginationContainer.appendChild(prevButton);
+
+                for (let i = startPage; i <= endPage; i++) {
+                    const pageButton = createPaginationButton(i, () => {
+                        currentPage = i;
+                        renderBlockData(currentBlocks, currentPage);
+                    });
+                    if (i === currentPage) {
+                        pageButton.classList.add('active');
+                    }
+                    paginationContainer.appendChild(pageButton);
+                }
+
+                const nextButton = createPaginationButton('下一页', () => {
+                    if (currentPage < totalPages) {
+                        currentPage++;
+                        renderBlockData(currentBlocks, currentPage);
+                    }
+                });
+                paginationContainer.appendChild(nextButton);
             }
-            p = p + 1;
-            changePageClass();
-            render();
-        };
+        }
+
+        function createPaginationButton(text, onClick) {
+            const button = document.createElement('button');
+            button.textContent = text;
+            button.addEventListener('click', onClick);
+            return button;
+        }
     </script>
 </body>
 </html>

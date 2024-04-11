@@ -44,7 +44,7 @@ contract VotingSystem {
 
     function castVote(string memory _option) public {
         require(!latestBallot.hasVoted[msg.sender], "You have already voted.");
-
+        require(latestBallot.isOpen, "Voting has already finished");
         latestBallot.voteCounts[_option]++;
         latestBallot.hasVoted[msg.sender] = true; // 记录用户已经投票
 

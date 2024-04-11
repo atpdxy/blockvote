@@ -14,7 +14,7 @@ const contractABI = VotingSystemContract.abi;
 const contractBytecode = VotingSystemContract.bytecode;
 
 // 打开或创建leveldb数据库
-    const db = new Level('ethereum', { valueEncoding: 'json' })
+const db = new Level('ethereum', { valueEncoding: 'json' })
 // 连接到以太坊网络
 const web3 = new Web3('http://localhost:7545');
 
@@ -41,12 +41,31 @@ const pool = mysql.createPool({
   
 // 存储区块信息到数据库
 async function saveBlockData(blockData) {
-    await db.put(blockData.blockHash, blockData);
+    try {
+        const blockDataString = JSON.stringify(blockData); 
+        await db.put(blockData.blockHash, blockDataString); // 存储转换后的字符串到数据库
+    } catch (error) {
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        throw error; // 抛出异常以便调用者捕获并处理
+    }
 }
 
 // 根据区块哈希检索区块信息
 async function getBlockData(blockHash) {
-    return await db.get(blockHash);
+    try {
+        const data = await db.get(blockHash);
+        const parsedData = JSON.parse(data); // 解析为 JSON 格式
+        return parsedData; // 返回完整的区块数据对象
+    } catch (error) {
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        return null; // 或者返回空对象 {}
+    }
 }
 
 // 将MySQL连接池添加到Express应用程序的本地变量中
@@ -66,6 +85,56 @@ function insertDataIntoBallots(creatorAddress, contractAddress, voteTitle, deadl
             });
             return;
         }
+    });
+}
+
+// 插入id和hash值
+function insertIntoEthereum(blockID, hashValue) {
+    const sql = 'INSERT INTO blockdata (blockID, hashValue) VALUES (?, ?)';
+    pool.query(sql, [blockID, hashValue], (error, result, fields) => {
+        if (error) {
+            logger.error({
+                errorMessage: error.message,
+                stackTrace: error.stack
+            });
+            return;
+        }
+    })
+}
+
+// 从数据库中获取 ballots 数据并返回给前端
+function getBallotsData(callback) {
+    // 构建查询语句
+    const sql = `SELECT * FROM blockdata ORDER BY blockID DESC`;
+
+    // 使用连接池获取连接
+    pool.getConnection((error, connection) => {
+        if (error) {
+            logger.error({
+                errorMessage: error.message,
+                stackTrace: error.stack
+            });
+            callback(error, null);
+            return;
+        }
+
+        // 执行查询操作
+        connection.query(sql, (error, results, fields) => {
+            // 释放连接
+            connection.release();
+
+            if (error) {
+                logger.error({
+                    errorMessage: error.message,
+                    stackTrace: error.stack
+                });
+                callback(error, null);
+                return;
+            }
+
+            // 查询成功，将结果返回给回调函数
+            callback(null, results);
+        });
     });
 }
 
@@ -107,6 +176,37 @@ process.on('SIGINT', () => {
   });
 });
 
+async function saveBlockDataToDatabase(fromAddress, toAddress) {
+    try {
+        // 在发生交易后调用该函数
+        const block = await web3.eth.getBlock('latest');
+        const blockData = {
+            blockId: block.number,
+            timestamp: block.timestamp,
+            blockHash: block.hash,
+            parentHash: block.parentHash,
+            difficulty: block.difficulty,
+            miner: block.miner,
+            stateRoot: block.stateRoot,
+            transactionsRoot: block.transactionsRoot,
+            receiptsRoot: block.receiptsRoot,
+            txHash: block.transactions,
+            gasUsed: block.gasUsed,
+            gasLimit: block.gasLimit,
+            fromAddress: fromAddress, 
+            toAddress: toAddress, 
+            uncles: block.uncles
+        };
+        insertIntoEthereum(block.number, block.hash); 
+        await saveBlockData(blockData); 
+    } catch (error) {
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+    }
+}
+
 // 创建 POST 路由处理前端提交的表单数据
 app.post('/createVote', async (req, res) => {
     // 从请求体中提取表单数据
@@ -144,34 +244,14 @@ app.post('/createVote', async (req, res) => {
             deadlineTimestamp,
             options
         });
-
+        
         res.json({ success: true, contractAddress: newContractInstance.options.address });
         // 在成功部署合约后调用该函数，将合约信息插入到数据库中
         insertDataIntoBallots(metaMaskUser, newContractInstance.options.address, voteTitle, formData.deadline);
-
         initContract(voteTitle, options, deadlineTimestamp, metaMaskUser, newContractInstance);
         // 部署合约成功后获取区块和交易信息
         // 获取最新区块的信息
-        const block = await web3.eth.getBlock('latest');
-        const blockData = {
-            blockId: block.number,
-            timestamp: block.timestamp,
-            blockHash: block.hash,
-            parentHash: block.parentHash,
-            difficulty: block.difficulty,
-            miner: block.miner,
-            stateRoot: block.stateRoot,
-            transactionsRoot: block.transactionsRoot,
-            receiptsRoot: block.receiptsRoot,
-            txHash: block.transactions,
-            gasUsed: block.gasUsed,
-            gasLimit: block.gasLimit,
-            fromAddress: metaMaskUser,
-            toAddress: newContractInstance.options.address,
-            uncles: block.uncles
-        };
-        // 保存区块信息到leveldb数据库
-        await saveBlockData(blockData);
+        saveBlockDataToDatabase(metaMaskUser, newContractInstance.options.address);
     } catch (error) {
         // 记录出错时的日志信息
         logger.error({
@@ -190,24 +270,25 @@ async function initContract(voteTitle, options, deadlineTimestamp, metaMaskUser,
             from: metaMaskUser, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
         });
-
+        saveBlockDataToDatabase(metaMaskUser, newContractInstance.options.address);
         // 调用Solidity合约中的setOptions函数
         await newContractInstance.methods.setOptions(options).send({
             from: metaMaskUser, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
         });
-
+        saveBlockDataToDatabase(metaMaskUser, newContractInstance.options.address);
         // 调用Solidity合约中的setDeadline函数
         await newContractInstance.methods.setDeadline(deadlineTimestamp).send({
             from: metaMaskUser, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
         });
-
+        saveBlockDataToDatabase(metaMaskUser, newContractInstance.options.address);
         // 设置投票状态
         await newContractInstance.methods.setIsOpen(true).send({
             from: metaMaskUser, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
         });
+        saveBlockDataToDatabase(metaMaskUser, newContractInstance.options.address);
     } catch (error) {
         // 记录错误日志
         logger.error({
@@ -217,38 +298,33 @@ async function initContract(voteTitle, options, deadlineTimestamp, metaMaskUser,
     }
 }
 
-// 查询整个网络上的区块
-app.get('/ethereum', async  (req, res) => {
-    try {
-        // 创建一个空数组来存储从 Leveldb 中检索的数据
-        const blockDataArray = [];
+app.get('/ethereum', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'ethereum.html'));
+});
 
-        // 使用 createReadStream 方法从 Leveldb 中读取数据
-        db.createReadStream()
-            .on('data', function (data) {
-                // 将每个键值对添加到 blockDataArray 数组中
-                blockDataArray.push(data);
-            })
-            .on('error', function (error) {
-                // 如果发生错误，则向客户端发送错误响应
+// 查询整个网络上的区块
+app.get('/allBlocks', async (req, res) => {
+    try {
+        // 从数据库获取 ballots 数据
+        getBallotsData((error, results) => {
+            if (error) {
                 logger.error({
                     errorMessage: error.message,
                     stackTrace: error.stack
                 });
-                console.error('Error while reading data from Leveldb:', error);
-                res.status(500).json({ success: false, error: 'Failed to read data from Leveldb' });
-            })
-            .on('end', function () {
-                // 当读取结束时，将 blockDataArray 数组发送到前端
-                res.json({ success: true, data: blockDataArray });
-            });
+                res.status(500).json({ success: false, error: 'Failed to retrieve data from MySQL' });
+                return;
+            }
+
+            // 数据提取成功，将结果发送给客户端
+            res.status(200).json({ success: true, data: results });
+        });
     } catch (error) {
         // 如果发生错误，则向客户端发送错误响应
         logger.error({
             errorMessage: error.message,
             stackTrace: error.stack
         });
-        console.error('Error while retrieving data from Leveldb:', error);
         res.status(500).json({ success: false, error: 'Failed to retrieve data from Leveldb' });
     }
 });
@@ -282,7 +358,7 @@ app.get('/getBallotInfo', async (req, res) => {
 // 获取当前用户创建的智能合约
 app.post('/getContracts', (req, res) => {
     const userPublicKey = req.body.publicKey;
-    const sql = `SELECT * FROM ballots WHERE creator_address = ? AND deleted = false`;
+    const sql = `SELECT * FROM ballots WHERE creator_address = ? AND deleted = false ORDER BY deadline DESC`;
     pool.query(sql, [userPublicKey], (error, results) => {
         if (error) {
             logger.error({
@@ -296,23 +372,39 @@ app.post('/getContracts', (req, res) => {
     });
 });
 
+// 查询某个区块的详细信息
+app.post('/blockDetails', async (req, res) => {
+    try {
+        const { hash } = req.body; // 获取请求中的哈希值
+        // 获取区块详细信息
+        const blockData = await getBlockData(hash);
+        // 将区块详细信息返回给前端
+        res.status(200).json({ success: true, data: blockData });
+    } catch (error) {
+        logger.error({
+            errorMessage: error.message,
+            stackTrace: error.stack
+        });
+        res.status(500).json({ success: false, error: 'Failed to fetch block details' });
+    }
+});
 
 app.post('/deleteContract', (req, res) => {
     const contractAddress = req.body.contractAddress;
     const publicKey = req.body.publicKey;
-    console.log(contractAddress);
-    console.log(publicKey);
     // 检查用户是否有权限删除合约，这里可以根据实际需求进行权限验证
 
     // 更新数据库中对应合约的 deleted 字段为真
     const queryString = 'UPDATE ballots SET deleted = true WHERE contract_address = ? AND creator_address = ?';
     pool.query(queryString, [contractAddress, publicKey], (err, result) => {
         if (err) {
-            console.error('更新数据库时出错:', err);
+            logger.error({
+                errorMessage: error.message,
+                stackTrace: error.stack
+            });
             res.status(500).json({ success: false, message: '合约删除失败' });
             return;
         }
-        console.log('合约删除成功');
         res.json({ success: true, message: '合约删除成功' });
     });
 });
@@ -320,7 +412,7 @@ app.post('/deleteContract', (req, res) => {
 // 获取当前用户参加过的投票项目
 app.post('/getHistoryContracts', (req, res) => {
     const userPublicKey = req.body.publicKey;
-    const sql = `SELECT * FROM history_contracts WHERE voter_address = ?`;
+    const sql = `SELECT * FROM history_contracts WHERE voter_address = ? ORDER BY deadline DESC`;
     pool.query(sql, [userPublicKey], (error, results) => {
         if (error) {
             logger.error({
@@ -337,12 +429,10 @@ app.post('/getHistoryContracts', (req, res) => {
 // 进行投票
 app.post('/vote', async (req, res) => {
     try {
-        let result;
         const contractAddress = req.query.contractAddress;
         const selectedOption = decodeURIComponent(req.query.selectedOption);
         const publicKey = req.query.publicKey;
         const contractInstance = new web3.eth.Contract(contractABI, contractAddress);
-
         // 调用合约实例的方法获取投票项目信息
         const deadlineTimestamp = await contractInstance.methods.getDeadline().call();
         const voteTitle = await contractInstance.methods.getBallotTitle().call();
@@ -363,7 +453,8 @@ app.post('/vote', async (req, res) => {
         await contractInstance.methods.castVote(selectedOption).send({
             from: publicKey, // 从这个地址发送交易
             gas: 3000000 // 设置gas限制
-        });
+        }); 
+        saveBlockDataToDatabase(publicKey, contractInstance.options.address);
         const deadlineData = new Date(Number(deadlineTimestamp));
         await insertHistoryContract(contractAddress, publicKey, voteTitle, deadlineData, selectedOption);
         // 发送响应
